@@ -2,114 +2,172 @@
 <html lang="en">
 	<head>
 		<title>Countdown</title>
-		<style type="text/css">
-			html, body, #Gamescreen {
-				margin: 0;
-				width: 100%;
-				height: 100%;
-            }
-            html, body {
-                background: black;
-                overflow: hidden;
-			}
-            div, img {
-                position: absolute;
-            }
-            #Gamescreen {
-                background-image: url("Backdrop.png"), linear-gradient(to top, #FFF600, #F47705);
-                background-size: 100% auto;
-                background-repeat: no-repeat;
-                background-position: 50% 100%;
-            }
-            #Overlay {
-                margin: 0;
-                left: 20%;
-                width: 60%;
-                top: 20%;
-                height: 60%;
-                background-color: #FFEBAF;
-                border-style: solid;
-                border-color: #A91800;
-                border-radius: 5%;
-                border-width: 10px;
-            }
-            #OverlayText {
-                top: 10%;
-                left: 10%;
-                color: #6D0F00;
-                font-size: 50px;
-            }
-            #OverlayCountdown {
-                width: 100%;
-                text-align: center;
-                top: 45%; /* Fallback */
-                top: calc(50% - 50px);
-                color: #6D0F00;
-                font-size: 100px;
-            }
-            #OverlayCity {
-                top: 10%;
-            }
-		</style>
+        <link rel="stylesheet" type="text/css" href="Style.css" />
 		<script type="text/javascript" src="jquery-1.8.3.min.js"></script>
+        <script type="text/javascript" src="Constants.js"></script>
+        <script type="text/javascript" src="Physics.js"></script>
 		<script type="text/javascript">
-            var FRAME_DELAY = 20.0; // Milliseconds
-            var TRIAL_TIME = 5000.0; // Milliseconds
+            /**
+             * Used to stop timeout loops
+             * When true, the loops do not run
+             */
+            var trialComplete = true;
+            var trialTimer;
+            var trialType;
             
 			window.onload = function() {
-                ResetProjectiles();
-                setTimeout(Tick, FRAME_DELAY);
+                // Bind the space bar event
+                $('body').keypress(function(event) {
+                    if (event.which == 32) {
+                        RunTrial();
+                        
+                        // Unbind the spacebar
+                        $('body').unbind('keypress');
+                    }
+                });
 			};
             
             /**
-             * Places the aeroplane and the missile where they should start
-             * before any trial should begin
+             * Starts the trial with the countdown
              */
-            ResetProjectiles = function() {
-                $('#Aeroplane').css({
-                    "left": "100%", 
-                    "top": "15%", 
-                });
-                $('#Missile').css({
-                    "left": "85%", 
-                    "top": "100%", 
-                });
-            }
+            RunTrial = function() {
+                if (!trialComplete) {
+                    return;
+                }
+                
+                Reset();
+                
+                // Determine the trial type
+                trialType = TRIAL_TYPE_ENUM[Math.floor(Math.random() * TRIAL_TYPE_ENUM.length)];
+                if (trialType == AIRPLANE) {
+                    $('#Aeroplane').show();
+                } else if (trialType == MISSILE) {
+                    $('#Missile').show();
+                } else {
+                    alert('Unknown trial type');
+                }
+                
+                // Start the countdown
+                setTimeout(Countdown, 1000);
+                
+                // This ends the trial
+                trialTimer = setTimeout(function() {
+                    // Update the score
+                    var score;
+                    if (trialType == AIRPLANE) {
+                        score = $('#GoodScore');
+                    } else if (trialType == MISSILE) {
+                        score = $('#BadScore');
+                    } else {
+                        alert('Unknown trial type');
+                    }
+                    score.text('' + (parseInt(score.text()) + 1));
+                    
+                    CompleteTrial();
+                }, COUNTDOWN_TIME + TRIAL_TIME);
+            };
             
+            /**
+             * Marks the trial as complete
+             * Starts the next trial after some delay
+             */
+            CompleteTrial = function() {
+                if (!trialComplete) {
+                    trialComplete = true;
+                    clearTimeout(trialTimer);
+                    setTimeout(RunTrial, PAUSE_BETWEEN_TRIALS);
+                    
+                    // Unbind the spacebar
+                    $('body').unbind('keypress');
+                    
+                    // Update the score
+                    var total = $('#TotalTrials');
+                    total.text('' + (parseInt(total.text()) + 1));
+                }
+            }
+
+            /**
+             * Prepares the document for the next trial
+             * Resets the countdown timer
+             * Places the aeroplane and the missile where they should start
+             *   before any trial should begin
+             */
+            Reset = function() {
+                trialComplete = false;
+                
+                $('#Overlay').show();
+                $('#OverlayCountdown').text('' + (COUNTDOWN_TIME / 1000));
+                
+                // Defined in Physics.js
+                ResetProjectiles();
+                $('#Aeroplane').hide();
+                $('#Missile').hide();
+                $('#Explosion').hide();
+            };
+            
+            /**
+             * Countdown loop
+             * Decrements the countdown and starts the game loop afterwards
+             */
+            Countdown = function() {
+                if (!trialComplete) {
+                    // Continue looping
+                    setTimeout(Countdown, 1000);
+                }
+                
+                // Decrement the countdown
+                var counter = $('#OverlayCountdown');
+                var count = parseInt(counter.text()) - 1;
+                counter.text('' + count);
+                
+                // Hide the overlay once the counter reaches 0
+                if (count <= 0) {
+                    $('#Overlay').hide();
+                    
+                    // And start the game loop
+                    setTimeout(Tick, FRAME_DELAY);
+                    
+                    // Activate the cannon
+                    $('body').keypress(function(event) {
+                        if (event.which == 32) {
+                            Spacebar();
+                        }
+                    });
+                }
+            };
+
             /**
              * Game loop
              * Handles motion of projectiles
              */
             Tick = function() {
-                var width = $('#Gamescreen').width() * 1.0;
-                var height = $('#Gamescreen').height() * 1.0;
+                if (!trialComplete) {
+                    // Continue looping
+                    setTimeout(Tick, FRAME_DELAY);
+                }
+
+                // Defined in Physics.js
+                MoveProjectiles();
+            };
+            
+            /**
+             * Fires the cannon
+             */
+            Spacebar = function() {
+                if (!trialComplete) {
+                    // Update the score
+                    var score;
+                    if (trialType == AIRPLANE) {
+                        score = $('#BadScore');
+                    } else if (trialType == MISSILE) {
+                        score = $('#GoodScore');
+                    } else {
+                        alert('Unknown trial type');
+                    }
+                    score.text('' + (parseInt(score.text()) + 1));
+                }
                 
-                // Move the aeroplane left
-                // It should move off the screen over the trial time
-                var aeroplane = $('#Aeroplane');
-                var aeroplaneWidth = aeroplane.width();
-                var aeroplanePos = aeroplane.position().left / width 
-                                  - FRAME_DELAY / TRIAL_TIME
-                                      * (1.0 + aeroplaneWidth / width);
-                aeroplanePos *= 100; // Percent
-                aeroplane.css({
-                    "left": aeroplanePos + "%"
-                });
-                
-                // Move the missile towards the city
-                var missile = $('#Missile');
-                var missileRad = parseFloat(missile.attr('radians'))
-                                 + FRAME_DELAY / TRIAL_TIME
-                                     * 1.5707963267948966192313216916398;
-                missile.attr('radians', '' + missileRad);
-                missile.css({
-                    "left": (Math.cos(missileRad) * 85) + "%", 
-                    "top": (100 - Math.sin(missileRad) * 85) + "%", 
-                    "transform": "rotate(-" + missileRad + "rad)"
-                });
-                
-                // Continue looping
-                setTimeout(Tick, FRAME_DELAY);
+                CompleteTrial();
             };
 		</script>
 	</head>
@@ -117,7 +175,7 @@
         <div id="Gamescreen">
             <div id="Overlay">
                 <div id="OverlayText">Countdown!</div>
-                <div id="OverlayCountdown">-</div>
+                <div id="OverlayCountdown"></div>
             </div>
             <div id="OverlayCity">
                 <img src="City.png" alt="" />
@@ -130,6 +188,15 @@
             </div>
             <div id="Missile" radians="0.0">
                 <img src="Missile.png" alt="" />
+            </div>
+            <div id="Scoreboard">
+                <div>Score: 
+                    <span id="GoodScore">0</span>
+                    -
+                    <span id="BadScore">0</span>
+                    /
+                    <span id="TotalTrials">0</span>
+                </div>
             </div>
         </div>
 	</body>
